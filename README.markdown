@@ -17,7 +17,7 @@ style](#digestive-functors-formlet-style)
 [ideas behind the structure of
 "validations"](#ideas-behind-the-structure-of-validations)
 
-[hello world](#hello-world)
+[Example](#example)
 
 [testing](#testing)
 
@@ -35,7 +35,7 @@ existing solutions, and their problems
 There is a number of ways to do domain model validation in Haskell, but
 each current method has drawbacks. Let's imagine a simple user model:
 
-``` {.sourceCode .literate .haskell}
+```haskell
 data User = User
   { _firstName    :: Text
   , _lastName     :: Text
@@ -48,13 +48,13 @@ letter A, that the last name is not empty, that the email address is not
 empty, and that the email address is confirmed by a value that isn't
 stored in User. We also want all checkers to conform to the type
 
-``` {.sourceCode .haskell}
+```haskell
 a -> Either e b
 ```
 
 or
 
-``` {.sourceCode .haskell}
+```haskell
 (Monad m) => a -> m (Either a b)
 ```
 
@@ -62,7 +62,7 @@ or
 
 So, our checkers could look something like
 
-``` {.sourceCode .literate .haskell}
+```haskell
 notEmpty :: (Monoid a, Eq a) => a -> Either Text a
 notEmpty x =
   if (x == mempty)
@@ -72,7 +72,7 @@ notEmpty x =
 
 ,
 
-``` {.sourceCode .literate .haskell}
+```haskell
 startsWith :: Text -> Text -> Either Text Text
 startsWith predicate input = 
   if predicate `isPrefixOf` input
@@ -82,7 +82,7 @@ startsWith predicate input =
 
 , and
 
-``` {.sourceCode .literate .haskell}
+```haskell
 confirms :: (Eq a) => a -> a -> Either Text a
 confirms a b = case (a == b) of
   True -> Right b
@@ -95,7 +95,7 @@ confirms a b = case (a == b) of
 
 The simplest way to do this is with a smart constructor:
 
-``` {.sourceCode .literate .haskell}
+```haskell
 user :: Text -> Text -> Text -> Text -> Either Text User
 user firstName lastName emailAddress emailAddressConfirm = do
   firstName'    <- notEmpty firstName >>= startsWith "A"
@@ -119,7 +119,7 @@ inflexible.
 **digestive-functors** solves the multiple validations problem. Our
 formlet could look like:
 
-``` {.sourceCode .literate .haskell}
+```haskell
 userForm :: (Monad m) => Form Text m User
 userForm = User
   <$>  "firstName"    .: validate ((notEmpty >=> startsWith "A") >>> eitherToResult) (text Nothing)
@@ -140,14 +140,14 @@ ideas behind the structure of "validations"
 **validations** is based around 4 different data types. First, a
 *Checker* is function with type
 
-``` {.sourceCode .haskell}
+```haskell
 a -> Either e b
 ```
 
 Checkers tend to be non domain model specific, reusable pieces of code.
 For example,
 
-``` {.sourceCode .literate .haskell}
+```haskell
 nonEmpty :: (Monoid a, Eq a) => Checker Text a a
 nonEmpty x =
   if (x == mempty)
@@ -161,7 +161,7 @@ into structured data.
 
 A *Monadic Checker* is the same as a checker, but with type
 
-``` {.sourceCode .haskell}
+```haskell
 (Monad m) => a -> m (Either e b)
 ```
 
@@ -169,7 +169,7 @@ A *Monadic Checker* is the same as a checker, but with type
 
 The next data type is a *Validator*. It's a function with type
 
-``` {.sourceCode .haskell}
+```haskell
 a -> monad (Either (errorKey, errorValue) b)
 ```
 
@@ -178,31 +178,31 @@ type. This allows us to map a validator failure back to some given input
 (e.g. a form input field). If you look at the type signature for a
 Validator, you'll notice that it's very similar to
 
-``` {.sourceCode .haskell}
+```haskell
 a -> m b
 ```
 
 , so it's a [Kleisli
 category](http://www.haskell.org/haskellwiki/Monad_laws), but the Either
 inside doesn't allow us to use Haskell stuff for composing Kleisi
-categories (e.g. (\>=\>)). However, we do now how to unwrap and rewrap
-Either, so validations provides an instance of Category to allow for
+categories (e.g. `>=>`). However, we do know how to unwrap and rewrap
+Either, so `validations` provides an instance of Category to allow for
 validator composition. To create validators, we typically combine either
 a checker with a field name using
 
-``` {.sourceCode .haskell}
+```haskell
 attach :: (Monad m) => Checker ev a b -> ek -> Validator ek ev m a b
 ```
 
 or
 
-``` {.sourceCode .haskell}
+```haskell
 attachM :: (Monad m) => MonadicChecker ev m a b -> ek -> Validator ek ev m a b
 ```
 
-for monadic checkers. Both attach and attachM are included with
-validations, but you're free to wrap any conforming function as the
-Validator data constructor is public.
+for monadic checkers. Both `attach` and `attachM` are included with
+this library, but you're free to wrap any conforming function (the
+`Validator` data constructor is public.)
 
 The final important data type is a *Validation*. The type of a
 validations is:
@@ -213,35 +213,37 @@ where state is a type like a user record. newState is typically the same
 type as state, but a transformation is allowed. Validations can be
 constructed with
 
-    validation :: (Monad m) => Lens b s -> a -> Validator ek ev m a b -> Validation [(ek,ev)] m s s
+```haskell
+validation :: (Monad m) => Lens b s -> a -> Validator ek ev m a b -> Validation [(ek,ev)] m s s
+```
 
 Validations also form a category and can be composed, similar to
 Validators.
 
-hello world
+Example
 -----------
 
 Let's see the Validators and Validations in action. First, let's define
 a Account record:
 
-``` {.sourceCode .literate .haskell}
+```haskell
 data Account = Account
   { _name          :: Text
   , _accountNumber :: Text
   } deriving Show
 ```
 
-Next, we want to define lenses for accessing and mutating the fields. In
+Next, we want to define lenses for accessing and setting the fields. In
 this example, we are using the internal lens functionality of
 **validations**, but we'd typically use something like
 [lens](http://hackage.haskell.org/package/lens) in our application.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 name :: Lens Text Account
 name = lens _name (\s a -> s {_name = a})
 ```
 
-``` {.sourceCode .literate .haskell}
+```haskell
 accountNumber :: Lens Text Account
 accountNumber = lens _accountNumber (\s a -> s {_accountNumber = a})
 ```
@@ -249,22 +251,16 @@ accountNumber = lens _accountNumber (\s a -> s {_accountNumber = a})
 We also want to use **digestive-functors** to define our form to bring
 data in.
 
-``` {.sourceCode .literate .haskell}
+```haskell
 nameField :: Text
 nameField          = "name"
-```
 
-``` {.sourceCode .literate .haskell}
 confirmNameField :: Text
 confirmNameField   = "confirmName"
-```
 
-``` {.sourceCode .literate .haskell}
 accountNumberField :: Text
 accountNumberField = "accountNumber"
-```
 
-``` {.sourceCode .literate .haskell}
 accountForm :: (Monad m) => Form Text m (Text, Text, Text)
 accountForm = (,,)
   <$> nameField           .: (text Nothing)
@@ -279,14 +275,14 @@ to one correspondence between our input fields and Account record fields
 (the name confirm field will be discarded). So, our validation looks
 like
 
-``` {.sourceCode .literate .haskell}
+```haskell
 lengthIs :: Int -> Checker Text Text Text
 lengthIs predicate txt = case (compareLength txt predicate) of
   EQ -> Right txt
   _  -> Left "account number not correct length"
 ```
 
-``` {.sourceCode .literate .haskell}
+```haskell
 accountValidation :: (Monad m) => (Text, Text, Text) -> Validation [(Text, Text)] m Account Account
 accountValidation (f1, f2, f3) = 
   validation name f1 (
@@ -302,11 +298,11 @@ accountValidation (f1, f2, f3) =
   ) 
 ```
 
-What's going on here? First, since both Validations and Validators are
-Categories, we can use the (\>\>\>) operator from Control.Arrow. If
+What's going on here? First, since both `Validations` and `Validators` are
+Categories, we can use the (`>>>`) operator from `Control.Arrow`. If
 you're unfamiliar with this operator, for normal functions,
 
-``` {.sourceCode .haskell}
+```haskell
 a >>> b ≡ b . a
 ```
 
@@ -318,7 +314,7 @@ parameter passed into "accountValidation" and feeds it into "notEmpty".
 If "notEmpty" returns a "Left", then the validation will make no state
 changes, and instead adds
 
-``` {.sourceCode .haskell}
+```haskell
 ("name" , "is empty")
 ```
 
@@ -333,25 +329,25 @@ testing
 
 Testing a validation is simple. For example,
 
-``` {.sourceCode .literate .haskell}
-_ = runIdentity $ (runValidation  (accountValidation ("hi", "hi", "1234567890")) Account { _name = "", _accountNumber = "" } :: Identity (Account, [(Text, Text)]))
+```haskell
+runIdentity $ (runValidation  (accountValidation ("hi", "hi", "1234567890")) Account { _name = "", _accountNumber = "" } :: Identity (Account, [(Text, Text)]))
 ```
 
 yields
 
-``` {.sourceCode .haskell}
+```haskell
 (Account {_name = "hi", _accountNumber = "1234567890"},[])
 ```
 
 .
 
-``` {.sourceCode .literate .haskell}
-_ = runIdentity $ (runValidation  (accountValidation ("hi", "bye", "12345678900")) Account { _name = "", _accountNumber = "" } :: Identity (Account, [(Text, Text)]))
+```haskell
+runIdentity $ (runValidation  (accountValidation ("hi", "bye", "12345678900")) Account { _name = "", _accountNumber = "" } :: Identity (Account, [(Text, Text)]))
 ```
 
 yields
 
-``` {.sourceCode .haskell}
+```haskell
 (Account {_name = "", _accountNumber = ""},[("confirmName","fields do not match."),("accountNumber","account number not correct length")])
 ```
 
@@ -363,17 +359,17 @@ digestive-functors integration
 Integration with **digestive-functors** is also pretty simple. Instead
 of
 
-``` {.sourceCode .literate .haskell}
+```haskell
 posted :: (Monad m) => m (View Text, Maybe (Text,Text,Text))
 posted = postForm "f" accountForm $ testEnv [("f.name", "hello"), ("f.confirmName", "hello"), ("f.phoneNumber", "1(333)333-3333x3")]
 ```
 
-add validateView in as well, like
+add `validateView` in as well, like
 
-``` {.sourceCode .literate .haskell}
+```haskell
 validatedPosted :: (Monad m) => m (View Text, Maybe Account)
 validatedPosted =  posted >>= validateView accountValidation Account { _name = "", _accountNumber = "" }
 ```
 
-You can also use validateView' if your domain record has a Monoid
+You can also use `validateView'` if your domain record has a Monoid
 instance.
